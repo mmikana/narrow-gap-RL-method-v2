@@ -1,22 +1,8 @@
-"""
-2025/9/28
-修改空气动力学
-关于orientation所有的计算全都使用rad进行计算，只在接口处留有角度到弧度的变换
-"""
 import numpy as np
 from scipy.spatial.transform import Rotation
 
 
 class QuadrotorDynamics:
-    """
-    四旋翼无人机动力学模型
-
-    实现了论文中的四旋翼物理模型，包括：
-    - 电机推力计算
-    - 姿态动力学
-    - 位置动力学
-
-    """
 
     def __init__(self):
         """初始化无人机物理参数（与论文完全一致）"""
@@ -32,18 +18,18 @@ class QuadrotorDynamics:
         # 平动动力学参数
         self.mass = 1.2  # 质量 (kg)
         self.g = 9.81  # 重力加速度
-        self.k_d = 0.1  # 空气阻力系数
+        self.k_d = 0.08  # 空气阻力系数
 
         # 转动动力学参数
         self.size = np.array([0.47, 0.47, 0.23])  # 假设无人机尺寸 0.47x0.47x0.23m
         self.arm_length = self.size[0] * np.sqrt(2) / 2  # X型机臂对角线长度 (m)
-        self.inertia = np.diag([0.007, 0.007, 0.014])  # 惯性矩阵 (kg·m²)  # TODO
-        self.C_T = 6e-6  # 推力系数 (N/(rad/s)^2)
-        self.C_M = 8e-8  # 扭矩系数 (N·m/(rad/s)^2)
-        self.d_phi, self.d_theta, self.d_psi = 0.01, 0.01, 0.02  # 需要根据实际调整
+        self.inertia = np.diag([0.07, 0.07, 0.14])  # 惯性矩阵 (kg·m²)  # TODO
+        self.C_T = 1.1e-6  # 推力系数 (N/(rad/s)^2)
+        self.C_M = 1.4e-7  # 扭矩系数 (N·m/(rad/s)^2)
+        self.d_phi, self.d_theta, self.d_psi = 0.008, 0.008, 0.015  # 需要根据实际调整
 
         # 电机参数
-        self.min_motor_speed = 100.0   # 最小转速 (rad/s)
+        self.min_motor_speed = 100.0  # 最小转速 (rad/s)
         self.max_motor_speed = 1000.0  # 最大转速 (rad/s)
         self.delta_M = 0.05  # 电机的单步响应时间间隔，可根据实际情况调整
         self.c = np.exp(-self.dt / self.delta_M)  # 电机滞后响应系数
@@ -63,7 +49,6 @@ class QuadrotorDynamics:
         self.inertial_y = np.array([0, 1, 0])
         self.inertial_z = np.array([0, 0, 1])
 
-
     def reset(self, position, orientation):
         """重置无人机状态
         Args:
@@ -82,22 +67,22 @@ class QuadrotorDynamics:
         from scipy.spatial.transform import Rotation
         return Rotation.from_euler('xyz', self.orientation).as_matrix()
 
-    # def get_obs(self):
-    #     """获取当前无人机的观测状态，返回一个NumPy数组。
-    #     Returns:
-    #         np.ndarray: 形状为 (12,) 的数组，包含：
-    #             - 位置 [x, y, z]
-    #             - 速度 [vX, vY, vZ]
-    #             - 姿态 [roll, pitch, yaw]
-    #             - 角速度 [ωX, ωY, ωZ]
-    #     """
-    #     observation = np.concatenate([
-    #         self.position,  # [x, y, z]
-    #         self.velocity,  # [vX, vY, vZ]
-    #         self.orientation,  # [roll, pitch, yaw]
-    #         self.angular_velocity  # [ωX, ωY, ωZ]
-    #     ])
-    #     return observation.astype(np.float32)  # 统一数据类型
+    def get_obs(self):
+        """获取当前无人机的观测状态，返回一个NumPy数组。
+        Returns:
+            np.ndarray: 形状为 (12,) 的数组，包含：
+                - 位置 [x, y, z]
+                - 速度 [vX, vY, vZ]
+                - 姿态 [roll, pitch, yaw]
+                - 角速度 [ωX, ωY, ωZ]
+        """
+        observation = np.concatenate([
+            self.position,  # [x, y, z]
+            self.velocity,  # [vX, vY, vZ]
+            self.orientation,  # [roll, pitch, yaw]
+            self.angular_velocity  # [ωX, ωY, ωZ]
+        ])
+        return observation.astype(np.float32)  # 统一数据类型
 
     def update(self, motor_speeds, dt=0.2):
 
@@ -119,11 +104,11 @@ class QuadrotorDynamics:
             (self.rk4_update_from_derivatives(current_orientation, current_angular_velocity, angular_acc, dt))
         self.orientation = (self.orientation + np.pi) % (2 * np.pi) - np.pi
         # 角度范围约束：pitch限制在±π/2，其他角保持±π
-        roll, pitch, yaw = self.orientation
-        pitch_clamped = np.clip(pitch, -np.pi / 2, np.pi / 2)
-        roll_clamped = (roll + np.pi) % (2 * np.pi) - np.pi
-        yaw_clamped = (yaw + np.pi) % (2 * np.pi) - np.pi
-        self.orientation = np.array([roll_clamped, pitch_clamped, yaw_clamped])
+        # roll, pitch, yaw = self.orientation
+        # pitch_clamped = np.clip(pitch, -np.pi / 2, np.pi / 2)
+        # roll_clamped = ((roll + np.pi) % (2 * np.pi) - 1) * np.pi
+        # yaw_clamped = ((roll + np.pi) % (2 * np.pi) - 1) * np.pi
+        # self.orientation = np.array([roll_clamped, pitch_clamped, yaw_clamped])
 
         rot = Rotation.from_euler('xyz', self.orientation).as_matrix()
 
@@ -147,7 +132,7 @@ class QuadrotorDynamics:
         # 线性映射：[-1, 1] -> [min_motor_speed, max_motor_speed]
         # 公式：speed = min + (max - min) * (action + 1) / 2
         motor_speeds = self.min_motor_speed + (self.max_motor_speed - self.min_motor_speed) * (
-                    normalized_action + 1) / 2
+                normalized_action + 1) / 2
 
         return motor_speeds
 
@@ -212,8 +197,6 @@ class QuadrotorDynamics:
         linear_acc = (thrust_vector + gravity + drag_force) / self.mass
         return linear_acc
 
-
-
     def rk4_update_from_derivatives(self, current_state, current_rate, acceleration, dt):
         """
         使用RK4方法更新状态和速率（通用实现）
@@ -246,3 +229,32 @@ class QuadrotorDynamics:
         new_rate = updated_state[3:6]
 
         return new_state, new_rate
+
+    def calculate_relative_orientation(self, ng_orientation, rotation_order='zyx', degrees=False):
+        # 将姿态角转换为旋转矩阵
+        rot_A = Rotation.from_euler(rotation_order, self.orientation, degrees=degrees)
+        rot_B = Rotation.from_euler(rotation_order, ng_orientation, degrees=degrees)
+
+        # 计算B相对于A的旋转矩阵: R_B/A = R_B * R_A^{-1}
+        # 由于旋转矩阵是正交矩阵，逆矩阵等于转置矩阵
+        rot_B_rel_A = rot_B * rot_A.inv()
+
+        # 将相对旋转矩阵转换回姿态角
+        relative_att = rot_B_rel_A.as_euler(rotation_order, degrees=degrees)
+
+        # 归一化角度到标准范围（-π到π或-180°到180°）
+        for i in range(3):
+            if degrees:
+                # 度单位归一化
+                while relative_att[i] > 180:
+                    relative_att[i] -= 360
+                while relative_att[i] < -180:
+                    relative_att[i] += 360
+            else:
+                # 弧度单位归一化（默认）
+                while relative_att[i] > np.pi:
+                    relative_att[i] -= 2 * np.pi
+                while relative_att[i] < -np.pi:
+                    relative_att[i] += 2 * np.pi
+
+        return relative_att.tolist()

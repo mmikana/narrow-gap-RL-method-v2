@@ -3,7 +3,7 @@ import torch
 import os
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
-from Env.Env import Quad2NGEnv
+from Env.Env1 import Quad2NGEnv
 from uhtk.mcv_log_manager import LogManager
 from uhtk.VISUALIZE.mcom import mcom
 from SAC_agent import SACAgent

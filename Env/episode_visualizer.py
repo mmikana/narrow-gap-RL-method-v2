@@ -187,12 +187,10 @@ class EpisodeVisualizer:
                     [0, 4], [1, 5], [2, 6], [3, 7]  # 连接边
                 ]
                 for edge in edges:
-                    p1 = gap_corners[edge[0]]
-                    p2 = gap_corners[edge[1]]
-                    self.ax_3d.plot(
-                        [p1[0], p2[0]], [p1[1], p2[1]], [p1[2], p2[2]],
-                        'r-', linewidth=2, label='Narrow Gap' if edge == edges[0] else ""
-                    )
+                    x = [gap_corners[edge[0]][0], gap_corners[edge[1]][0]]
+                    y = [gap_corners[edge[0]][1], gap_corners[edge[1]][1]]
+                    z = [gap_corners[edge[0]][2], gap_corners[edge[1]][2]]
+                    self.ax_3d.plot(x, y, z, 'b-', linewidth=2)
             except AttributeError:
                 print("警告: 窄缝对象缺少get_gap_corners()方法，无法绘制窄缝")
 
@@ -406,7 +404,16 @@ class EpisodeVisualizer:
                         [-half_l, -half_h, -half_t],
                         [half_l, -half_h, -half_t]
                     ]
-
+                    corners = [
+                        [half_t, half_l, half_h],
+                        [-half_t, half_l, half_h],
+                        [-half_t, -half_l, half_h],
+                        [half_t, -half_l, half_h],
+                        [half_t, half_l, -half_h],
+                        [-half_t, half_l, -half_h],
+                        [-half_t, -half_l, -half_h],
+                        [half_t, -half_l, -half_h]
+                    ]
                     # 应用旋转（简化为绕Z轴旋转）
                     rot = R.from_euler('z', self.rotation).as_matrix()
                     rotated_corners = [np.dot(rot, np.array(c)) + self.center for c in corners]

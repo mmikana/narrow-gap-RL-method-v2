@@ -31,13 +31,14 @@ class Quad2NGEnv(gym.Env):
 
         #  TODO Reward need debug
         self.reward_config = {
-            'reward_achievegoal': 0,
-            'collision_penalty': -40,
-            'e_0_p': 1.2,
-            'orientation_weight': 0,
+            'reward_achievegoal': 100,
+            'collision_penalty': -200,
+            'p_e_0': 1.2,
+            'orientation_weight': 10,
             'position_weight': 1,
-            'speed_weight': 0,
-            'ideal_speed': 1.5
+            'speed_weight': 1,
+            'ideal_speed': 3,
+            'motor_speed_weight': 0.001
         }
         # 初始化奖励计算器
         self.reward_calculator = self.RewardCalculator(self.reward_config)
@@ -141,7 +142,7 @@ class Quad2NGEnv(gym.Env):
             self.success_count += 1
             # 达到解锁条件且未到最后一关
             if (self.success_count >= self.unlock_threshold and
-                self.current_level_idx < len(self.levels) - 1):
+                    self.current_level_idx < len(self.levels) - 1):
                 self.current_level_idx += 1
                 self._update_environment()
                 self.success_count = 0  # 重置计数器
@@ -154,13 +155,14 @@ class Quad2NGEnv(gym.Env):
             # 从配置中初始化奖励相关参数
             self.reward_achievegoal = config.get('reward_achievegoal')
             self.collision_penalty = config.get('collision_penalty')
-            self.e_0_p = config.get('e_0_p', 1.2)
+            self.p_e_0 = config.get('e_0_p', 1.2)
             self.orientation_weight = config.get('orientation_weight')
             self.position_weight = config.get('position_weight')
             self.speed_weight = config.get('speed_weight')
+            self.motor_speed_weight = config.get('motor_speed_weight')
             self.ideal_speed = config.get('ideal_speed')
 
-        def calculate_reward(self, uav, narrow_gap, goal_position, collision):
+        def calculate_reward(self, uav, ng, goal_achieved, collision, motor_speed_delta):
             """计算单步奖励"""
             reward_step = 0
 
@@ -169,32 +171,33 @@ class Quad2NGEnv(gym.Env):
                 reward_step += self.collision_penalty
 
             # 到达目标奖励
-            e_t_p = np.linalg.norm(uav.position - goal_position)
-            goal_distance = 0.5 * narrow_gap.gap_thickness + 0.5 * uav.size[0]
-            if e_t_p < goal_distance:
+            if goal_achieved:
                 reward_step += self.reward_achievegoal
 
             # 位置奖励
-            reward_distance = self.position_weight * np.exp(-e_t_p)
-            reward_step += reward_distance
+            p_e = np.linalg.norm(uav.position - ng.center)
+            reward_position = 1 / (1 + self.position_weight * (p_e ** 2))
+            reward_step += reward_position
 
             # 姿态奖励
-            h_t_p = np.maximum(1 - (e_t_p / self.e_0_p), 0)
-            e_t_psi = np.arccos(np.dot(uav.inertial_x, narrow_gap.gap_x)
-                                / (np.linalg.norm(uav.inertial_x) * np.linalg.norm(narrow_gap.gap_x) + 1e-10))
-            e_t_phi = np.arccos(np.dot(uav.inertial_y, narrow_gap.gap_y)
-                                / (np.linalg.norm(uav.inertial_y) * np.linalg.norm(narrow_gap.gap_y) + 1e-10))
-            e_t_theta = np.arccos(np.dot(uav.inertial_z, narrow_gap.gap_z)
-                                / (np.linalg.norm(uav.inertial_z) * np.linalg.norm(narrow_gap.gap_z) + 1e-10))
-            e_t_ori_2 = np.square(e_t_phi) + np.square(e_t_theta) + np.square(e_t_psi)
-            reward_orientation = -self.orientation_weight * np.square(h_t_p) * (1 - np.exp(-e_t_ori_2))
+            trigger_p = np.maximum(1 - (p_e / self.p_e_0), 0)
+            # 计算角度差
+            phi_e, theta_e, psi_e = uav.calculate_relative_orientation(ng.orientation, degrees=False)
+
+            reward_ori_1 = trigger_p / (1 + self.orientation_weight * np.abs(phi_e))
+            reward_ori_2 = trigger_p / (1 + self.orientation_weight * np.abs(theta_e))
+            reward_ori_3 = trigger_p / (1 + self.orientation_weight * np.abs(psi_e))
+            reward_orientation = reward_ori_1 + reward_ori_2 + reward_ori_3
             reward_step += reward_orientation
 
             # 速度奖励
             e_speed = abs(np.linalg.norm(uav.velocity) - self.ideal_speed)
-            speed_reward = -self.speed_weight * e_speed / self.ideal_speed
-            reward_step += speed_reward
+            reward_speed = -self.speed_weight * e_speed / self.ideal_speed
+            reward_step += reward_speed
 
+            # 电机震荡惩罚
+            reward_motor_speed = -self.motor_speed_weight * np.sum(np.abs(motor_speed_delta))
+            reward_step += reward_motor_speed
             return reward_step
 
     def reset(self, seed=None, options=None):
@@ -249,9 +252,13 @@ class Quad2NGEnv(gym.Env):
 
     def step(self, action):
         self.current_step += 1
-        # 动作执行
+        # 动作选取
         motor_speeds = self.uav.normalized_action_to_motor_speeds(action)
-        self.uav.update(motor_speeds)
+        # 电机迟滞(从动力学里了过来)
+        current_motor_speeds = self.uav.c * self.uav.prev_motor_speeds + (1 - self.uav.c) * motor_speeds
+        motor_speed_delta = current_motor_speeds - self.uav.prev_motor_speeds
+        self.uav.prev_motor_speeds = current_motor_speeds
+        self.uav.update(current_motor_speeds)
 
         # 检查碰撞状态
         collision = self.detector.efficient_collision_check(self.uav, self.NarrowGap)
@@ -263,8 +270,8 @@ class Quad2NGEnv(gym.Env):
         )
         truncated = False
         # 计算奖励
-        reward_step = self.reward_calculator.calculate_reward(self.uav, self.NarrowGap, self.NarrowGap.center,
-                                                              collision)
+        reward_step = self.reward_calculator.calculate_reward(self.uav, self.NarrowGap, self.achieve_goal(), collision,
+                                                              motor_speed_delta)
 
         # 记录数据
         self.trajectory_history.append(self.uav.position.copy())
@@ -276,12 +283,12 @@ class Quad2NGEnv(gym.Env):
         if terminated or truncated:
             self.current_episode += 1
             if self.plot:
-                save_data_dir = os.path.join("Quad2NGEnv_data")
+                save_data_dir = os.path.join("RESULT", "narrow_gap-ppo_ma-1v0", "Quad2NGEnv_data")
                 data_filepath = self.save_fly_data(save_data_dir)
                 self.save_fly_data()
-                from Env.episode_visualizer import EpisodeVisualizer
+                from .episode_visualizer import EpisodeVisualizer
                 visualizer = EpisodeVisualizer()
-                save_plot_dir = os.path.join("QuadFlyEnv_plot")
+                save_plot_dir = os.path.join("RESULT", "narrow_gap-ppo_ma-1v0", "Quad2NGEnv_plot")
                 visualizer.draw_fly_data(data_filepath=data_filepath, save_plot_dir=save_plot_dir)
 
         self._check_level_unlock(self.achieve_goal())
@@ -318,7 +325,7 @@ class Quad2NGEnv(gym.Env):
     def enter_gap(self):
         """判断 UAV 中心是否进入 GAP 的 3D 包围盒"""
         # 获取缝隙的四个角点
-        gap_corners = self.NarrowGap.get_gap_corners()
+        gap_corners = self.NarrowGap._get_gap_corners()
 
         # 计算缝隙的边界
         gap_min = np.min(gap_corners, axis=0)
@@ -389,3 +396,4 @@ class Quad2NGEnv(gym.Env):
             json.dump(episode_data, f, indent=2)
 
         return filepath
+

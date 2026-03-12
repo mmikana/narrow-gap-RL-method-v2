@@ -28,6 +28,7 @@ class NarrowGap:
 
         self.tilt = np.radians(np.float64(tilt))  # 转为弧度
         self.rotation = np.radians(np.float64(rotation))  # 转为弧度
+        self.orientation = np.array([self.rotation, self.tilt, 0], dtype=np.float64)  # [roll,pitch,yaw]
 
         # 计算半尺寸
         self.gap_half_length = self.gap_length / 2
