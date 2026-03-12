@@ -20,19 +20,19 @@
 - **动力学建模**：
   - 电机推力计算：$F = C_T \cdot \omega^2$
   - 扭矩计算：$\tau = C_M \cdot \omega^2$
-  - 空气阻力：$F_{drag} = -k_d \cdot v \cdot ||v||$
+  - 空气阻力：$F_{\text{drag}} = -k_d \cdot v \cdot \|v\|$
   - 重力与科里奥利力耦合
 - **数值积分**：RK4 四阶龙格库塔方法保证仿真精度
-- **电机模型**：一阶惯性滞后响应 $ \omega_{curr} = c \cdot \omega_{prev} + (1-c) \cdot \omega_{cmd} $
+- **电机模型**：一阶惯性滞后响应 $\omega_{\text{curr}} = c \cdot \omega_{\text{prev}} + (1-c) \cdot \omega_{\text{cmd}}$
 
 ```python
 # 关键参数
-mass = 1.2 kg          # 无人机质量
-arm_length = 0.33 m    # X 型机臂对角线长度
-inertia = diag(0.07, 0.07, 0.14) kg·m²  # 惯性矩阵
-C_T = 1.1e-6           # 推力系数
-C_M = 1.4e-7           # 扭矩系数
-dt = 0.02 s            # 仿真步长
+mass = 1.2\,\text{kg}          # 无人机质量
+arm_length = 0.33\,\text{m}    # X 型机臂对角线长度
+inertia = \text{diag}(0.07, 0.07, 0.14)\,\text{kg·m}^2  # 惯性矩阵
+C_T = 1.1\times10^{-6}         # 推力系数
+C_M = 1.4\times10^{-7}         # 扭矩系数
+dt = 0.02\,\text{s}            # 仿真步长
 ```
 
 ---
@@ -43,12 +43,12 @@ dt = 0.02 s            # 仿真步长
 
 | 参数 | 含义 | 默认值 |
 |------|------|--------|
-| `center` | 缝隙中心坐标 | (0, 0, 0) |
-| `gap_length` | y 方向长度 | 0.7 m |
-| `gap_height` | z 方向高度 | 0.36 m |
-| `gap_thickness` | x 方向厚度 | 0.1 m |
-| `tilt` | 绕 y 轴倾斜角 | 30° |
-| `rotation` | 绕中心旋转角 | 30° |
+| `center` | 缝隙中心坐标 | $(0, 0, 0)$ |
+| `gap_length` | y 方向长度 | $0.7\,\text{m}$ |
+| `gap_height` | z 方向高度 | $0.36\,\text{m}$ |
+| `gap_thickness` | x 方向厚度 | $0.1\,\text{m}$ |
+| `tilt` | 绕 y 轴倾斜角 | $30^\circ$ |
+| `rotation` | 绕中心旋转角 | $30^\circ$ |
 
 **技术要点**：
 - 基于 scipy `Rotation` 的局部坐标系计算
@@ -95,10 +95,10 @@ action = [归一化电机转速] ∈ [-1, 1]⁴
 #### 复合奖励函数
 | 奖励项 | 公式/说明 |
 |--------|-----------|
-| 位置奖励 | $r_{pos} = \frac{1}{1 + w_{pos} \cdot ||p_e||^2}$ |
-| 姿态奖励 | $r_{ori} = \sum \frac{trigger\_p}{1 + w_{ori} \cdot |\phi_e|}$ |
-| 速度奖励 | $r_{speed} = -w_{speed} \cdot \frac{|v - v_{ideal}|}{v_{ideal}}$ |
-| 电机惩罚 | $r_{motor} = -w_{motor} \cdot \sum|\Delta\omega|$ |
+| 位置奖励 | $r_{\text{pos}} = \frac{1}{1 + w_{\text{pos}} \cdot \|p_e\|^2}$ |
+| 姿态奖励 | $r_{\text{ori}} = \sum \frac{\text{trigger}_p}{1 + w_{\text{ori}} \cdot |\phi_e|}$ |
+| 速度奖励 | $r_{\text{speed}} = -w_{\text{speed}} \cdot \frac{|v - v_{\text{ideal}}|}{v_{\text{ideal}}}$ |
+| 电机惩罚 | $r_{\text{motor}} = -w_{\text{motor}} \cdot \sum|\Delta\omega|$ |
 | 碰撞惩罚 | -200 |
 | 成功奖励 | +100 |
 
